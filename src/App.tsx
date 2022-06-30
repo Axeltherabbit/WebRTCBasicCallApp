@@ -2,14 +2,19 @@ import { useEffect, useRef, useState } from 'react';
 import 'style/App.scss';
 import { LocalVideo } from './components/LocalVideo/LocalVideo';
 
-import { getDevicesCount, SetUpConnection } from './utilities/webrtc';
+import { getDevicesCount } from './utilities/webrtc';
 
 function App() {
   const myVideo = useRef<HTMLVideoElement>(null!);
   const [deviceCounter, setDeviceCounter] = useState(0);
   const [streamData, setStreamData] = useState<MediaStream | undefined>(undefined);
   const [username, setUsername] = useState('');
-  const [connection, setConnection] = useState<WebSocket>();
+  const [callname, setCallname] = useState('');
+
+  const [socket, setSocket] = useState<WebSocket>(null!);
+  const [myConnection, setMyConnection] = useState<RTCPeerConnection>(null!);
+
+  var connectedUser: string;
 
   useEffect(() => {
     getDevicesCount().then((n) => setDeviceCounter(n));
@@ -17,11 +22,120 @@ function App() {
       myVideo.current.srcObject = stream;
       setStreamData(stream);
     });
+    setSocket(new WebSocket('ws://localhost:9090'));
   }, []);
 
-  const login = (event) => {
+  if (socket) {
+    //handle messages from the server
+    socket.onmessage = (message) => {
+      var data = JSON.parse(message.data);
+      console.log('server : ', message);
+
+      switch (data.type) {
+        case 'login':
+          onLogin(data.success);
+          break;
+        case 'offer':
+          onOffer(data.offer, data.name);
+          break;
+        case 'answer':
+          onAnswer(data.answer);
+          break;
+        case 'candidate':
+          onCandidate(data.candidate);
+          break;
+        default:
+          break;
+      }
+    };
+
+    socket.onopen = () => {
+      console.log('socket connected');
+    };
+
+    socket.onerror = (err) => {
+      console.log('Got error', err);
+    };
+  }
+  //when a user logs in
+  const onLogin = (success: boolean) => {
+    if (success === false) {
+      alert('oops...try a different username');
+    } else {
+      console.log('loggin in');
+      //creating our RTCPeerConnection object
+      var configuration: RTCConfiguration = {
+        iceServers: [{ urls: 'stun:stun.l.google.com:19302' }],
+      };
+
+      const con = new RTCPeerConnection(configuration);
+
+      //setup ice handling
+      //when the browser finds an ice candidate we send it to another peer
+      con.onicecandidate = (event) => {
+        if (event.candidate) {
+          send({
+            type: 'candidate',
+            candidate: event.candidate,
+          });
+        }
+      };
+      setMyConnection(con);
+    }
+  };
+
+  //when another user answers to our offer
+  const onAnswer = (answer: RTCSessionDescriptionInit) => {
+    console.log('received answer', answer);
+    myConnection.setRemoteDescription(new RTCSessionDescription(answer));
+  };
+  //when we got ice candidate from another user
+  const onCandidate = (candidate: RTCIceCandidate) => {
+    console.log('received candidate', candidate);
+    myConnection.addIceCandidate(new RTCIceCandidate(candidate));
+  };
+
+  //when somebody wants to call us
+  const onOffer = (offer: RTCSessionDescriptionInit, name: string) => {
+    console.log('received offer', offer);
+    connectedUser = name;
+    myConnection.setRemoteDescription(new RTCSessionDescription(offer)).then(() =>
+      myConnection.createAnswer().then((answer) => {
+        myConnection.setLocalDescription(answer);
+        send({
+          type: 'answer',
+          answer: answer,
+        });
+      })
+    );
+  };
+
+  const loginSubmit = (event: React.FormEvent<HTMLFormElement>) => {
+    console.log('called submit login');
     event.preventDefault();
-    setConnection(SetUpConnection(username));
+    send({
+      type: 'login',
+      name: username,
+    });
+  };
+
+  const send = (message) => {
+    console.log('sending :', message);
+    //attach the other peer username to our messages
+    if (connectedUser) {
+      message.name = connectedUser;
+    }
+    socket.send(JSON.stringify(message));
+  };
+
+  const callSubmit = (event: React.FormEvent<HTMLFormElement>) => {
+    if (!callname) return;
+    console.log('calling : ', callname);
+    event.preventDefault();
+    myConnection.createOffer().then((offer) => {
+      socket.send(JSON.stringify({ type: 'offer', offer: offer, name: callname }));
+      myConnection.setLocalDescription(offer);
+    });
   };
 
   return (
@@ -29,12 +143,13 @@ function App() {
       <p> device count : {deviceCounter}</p>
       <p> Stream : {streamData?.active ? 'active' : 'not active'}</p>
       <p> ID : {streamData?.id ?? undefined}</p>
-      {connection ? <p> Username : {username}</p> : null}
+      {myConnection ? <p> Username : {username}</p> : null}
       <div className='column'>
         <LocalVideo videoRef={myVideo} />
       </div>
-      <label htmlFor='inputUsername'>Username :</label>
-      <form onSubmit={login}>
+      <form onSubmit={loginSubmit}>
+        <label htmlFor='inputUsername'>Username :</label>
+
         <input
           id='inputUsername'
           type='text'
@@ -46,6 +161,22 @@ function App() {
         />
         <button type='submit'>Connect</button>
       </form>
+      {myConnection ? (
+        <form onSubmit={callSubmit}>
+          <label htmlFor='inputCall'>Call :</label>
+
+          <input
+            id='inputCall'
+            type='text'
+            onChange={(e) => setCallname(e.target.value)}
+            minLength={4}
+            title='Only letters allowed'
+            pattern='[A-Za-z]+'
+            required
+          />
+          <button type='submit'>Call</button>
+        </form>
+      ) : null}
     </div>
   );
 }
