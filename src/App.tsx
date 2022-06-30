@@ -1,11 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
 import 'style/App.scss';
-import { LocalVideo } from './components/LocalVideo/LocalVideo';
 
 import { getDevicesCount } from './utilities/webrtc';
 
 function App() {
   const myVideo = useRef<HTMLVideoElement>(null!);
+  const remoteVideo = useRef<HTMLVideoElement>(null!);
+  const [remoteVideoSet, setRemoteVideoSet] = useState(false);
+
   const [deviceCounter, setDeviceCounter] = useState(0);
   const [streamData, setStreamData] = useState<MediaStream | undefined>(undefined);
   const [username, setUsername] = useState('');
@@ -59,7 +61,7 @@ function App() {
   }
   //when a user logs in
   const onLogin = (success: boolean) => {
-    if (success === false) {
+    if (!success) {
       alert('oops...try a different username');
     } else {
       console.log('loggin in');
@@ -69,6 +71,9 @@ function App() {
       };
 
       const con = new RTCPeerConnection(configuration);
+      streamData?.getTracks().forEach((track) => {
+        con.addTrack(track, streamData);
+      });
 
       //setup ice handling
       //when the browser finds an ice candidate we send it to another peer
@@ -89,6 +94,13 @@ function App() {
     console.log('received answer', answer);
     myConnection.setRemoteDescription(new RTCSessionDescription(answer));
   };
+
+  myConnection?.addEventListener('track', (event) => {
+    console.log('event track triggered', event.streams);
+    remoteVideo.current.srcObject = event.streams[0];
+    setRemoteVideoSet(true);
+  });
+
   //when we got ice candidate from another user
   const onCandidate = (candidate: RTCIceCandidate) => {
     console.log('received candidate', candidate);
@@ -119,7 +131,7 @@ function App() {
     });
   };
 
-  const send = (message) => {
+  const send = (message: any) => {
     console.log('sending :', message);
     //attach the other peer username to our messages
     if (connectedUser) {
@@ -145,7 +157,8 @@ function App() {
       <p> ID : {streamData?.id ?? undefined}</p>
       {myConnection ? <p> Username : {username}</p> : null}
       <div className='column'>
-        <LocalVideo videoRef={myVideo} />
+        <video width='320' height='240' ref={myVideo} autoPlay playsInline muted />
+        <video width='320' height='240' ref={remoteVideo} autoPlay playsInline />
       </div>
       <form onSubmit={loginSubmit}>
         <label htmlFor='inputUsername'>Username :</label>
