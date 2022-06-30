@@ -2,11 +2,11 @@ import { useEffect, useRef, useState } from 'react';
 import 'style/App.scss';
 
 import { getDevicesCount } from './utilities/webrtc';
+import { SignalServer, RTCconf } from './webrtc.config.json';
 
 function App() {
   const myVideo = useRef<HTMLVideoElement>(null!);
   const remoteVideo = useRef<HTMLVideoElement>(null!);
-  const [remoteVideoSet, setRemoteVideoSet] = useState(false);
 
   const [deviceCounter, setDeviceCounter] = useState(0);
   const [streamData, setStreamData] = useState<MediaStream | undefined>(undefined);
@@ -24,7 +24,7 @@ function App() {
       myVideo.current.srcObject = stream;
       setStreamData(stream);
     });
-    setSocket(new WebSocket('ws://localhost:9090'));
+    setSocket(new WebSocket(SignalServer));
   }, []);
 
   if (socket) {
@@ -52,11 +52,11 @@ function App() {
     };
 
     socket.onopen = () => {
-      console.log('socket connected');
+      console.log('Socket connected');
     };
 
     socket.onerror = (err) => {
-      console.log('Got error', err);
+      console.log('Socket error', err);
     };
   }
   //when a user logs in
@@ -64,10 +64,10 @@ function App() {
     if (!success) {
       alert('oops...try a different username');
     } else {
-      console.log('loggin in');
+      console.log('Logging in');
       //creating our RTCPeerConnection object
       var configuration: RTCConfiguration = {
-        iceServers: [{ urls: 'stun:stun.l.google.com:19302' }],
+        iceServers: [RTCconf],
       };
 
       const con = new RTCPeerConnection(configuration);
@@ -91,25 +91,24 @@ function App() {
 
   //when another user answers to our offer
   const onAnswer = (answer: RTCSessionDescriptionInit) => {
-    console.log('received answer', answer);
+    console.log('Received answer', answer);
     myConnection.setRemoteDescription(new RTCSessionDescription(answer));
   };
 
   myConnection?.addEventListener('track', (event) => {
-    console.log('event track triggered', event.streams);
+    console.log('Event track triggered', event.streams);
     remoteVideo.current.srcObject = event.streams[0];
-    setRemoteVideoSet(true);
   });
 
   //when we got ice candidate from another user
   const onCandidate = (candidate: RTCIceCandidate) => {
-    console.log('received candidate', candidate);
+    console.log('Received candidate', candidate);
     myConnection.addIceCandidate(new RTCIceCandidate(candidate));
   };
 
   //when somebody wants to call us
   const onOffer = (offer: RTCSessionDescriptionInit, name: string) => {
-    console.log('received offer', offer);
+    console.log('Received offer', offer);
     connectedUser = name;
     myConnection.setRemoteDescription(new RTCSessionDescription(offer)).then(() =>
       myConnection.createAnswer().then((answer) => {
@@ -123,7 +122,7 @@ function App() {
   };
 
   const loginSubmit = (event: React.FormEvent<HTMLFormElement>) => {
-    console.log('called submit login');
+    console.log('Called submit login');
     event.preventDefault();
     send({
       type: 'login',
@@ -132,17 +131,18 @@ function App() {
   };
 
   const send = (message: any) => {
-    console.log('sending :', message);
     //attach the other peer username to our messages
     if (connectedUser) {
       message.name = connectedUser;
     }
+    console.log('Sending :', message);
+
     socket.send(JSON.stringify(message));
   };
 
   const callSubmit = (event: React.FormEvent<HTMLFormElement>) => {
     if (!callname) return;
-    console.log('calling : ', callname);
+    console.log('Calling : ', callname);
     event.preventDefault();
     myConnection.createOffer().then((offer) => {
       socket.send(JSON.stringify({ type: 'offer', offer: offer, name: callname }));

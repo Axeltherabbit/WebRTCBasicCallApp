@@ -1,0 +1,4 @@
+{
+  "SignalServer": "ws://localhost:9090",
+  "RTCconf": { "urls": "stun:stun.l.google.com:19302" }
+}

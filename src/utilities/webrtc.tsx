@@ -17,7 +17,3 @@ export const getDevicesCount = async (): Promise<number> => {
   }
   return cameraCount ?? 0;
 };
-
-export const getDisplayStream = async () => {
-  return navigator.mediaDevices.getDisplayMedia();
-};
