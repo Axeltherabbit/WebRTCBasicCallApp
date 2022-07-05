@@ -1,20 +1,25 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import 'style/App.scss';
 
 import { getDevicesCount } from './utilities/webrtc';
 import { SignalServer, RTCconf } from './webrtc.config.json';
 
+const socket = new WebSocket(SignalServer);
+//creating our RTCPeerConnection object
+const configuration: RTCConfiguration = {
+  iceServers: [RTCconf],
+};
+const myConnection = new RTCPeerConnection(configuration);
+
 function App() {
   const myVideo = useRef<HTMLVideoElement>(null!);
   const remoteVideo = useRef<HTMLVideoElement>(null!);
 
+  const [loggedIn, setLoggedIn] = useState(false);
   const [deviceCounter, setDeviceCounter] = useState(0);
   const [streamData, setStreamData] = useState<MediaStream | undefined>(undefined);
   const [username, setUsername] = useState('');
   const [callname, setCallname] = useState('');
-
-  const [socket, setSocket] = useState<WebSocket>(null!);
-  const [myConnection, setMyConnection] = useState<RTCPeerConnection>(null!);
 
   var connectedUser: string;
 
@@ -23,61 +28,59 @@ function App() {
     navigator.mediaDevices.getUserMedia({ video: true, audio: true }).then((stream) => {
       myVideo.current.srcObject = stream;
       setStreamData(stream);
+      stream.getTracks().forEach((track) => {
+        myConnection.addTrack(track, stream);
+      });
     });
-    setSocket(new WebSocket(SignalServer));
+    myConnection.addEventListener(
+      'track',
+      (event) => {
+        console.log('Event track triggered', event.streams);
+        remoteVideo.current.srcObject = event.streams[0];
+      },
+      { once: true }
+    );
   }, []);
 
-  if (socket) {
-    //handle messages from the server
-    socket.onmessage = (message) => {
-      var data = JSON.parse(message.data);
-      console.log('server : ', message);
+  //handle messages from the server
+  socket.onmessage = (message) => {
+    var data = JSON.parse(message.data);
+    console.log('server : ', message);
 
-      switch (data.type) {
-        case 'login':
-          onLogin(data.success);
-          break;
-        case 'offer':
-          onOffer(data.offer, data.name);
-          break;
-        case 'answer':
-          onAnswer(data.answer);
-          break;
-        case 'candidate':
-          onCandidate(data.candidate);
-          break;
-        default:
-          break;
-      }
-    };
+    switch (data.type) {
+      case 'login':
+        onLogin(data.success);
+        break;
+      case 'offer':
+        onOffer(data.offer, data.name);
+        break;
+      case 'answer':
+        onAnswer(data.answer);
+        break;
+      case 'candidate':
+        onCandidate(data.candidate);
+        break;
+      default:
+        break;
+    }
+  };
 
-    socket.onopen = () => {
-      console.log('Socket connected');
-    };
+  socket.onopen = () => {
+    console.log('Socket connected');
+  };
 
-    socket.onerror = (err) => {
-      console.log('Socket error', err);
-    };
-  }
+  socket.onerror = (err) => {
+    console.log('Socket error', err);
+  };
+
   //when a user logs in
   const onLogin = (success: boolean) => {
     if (!success) {
       alert('oops...try a different username');
     } else {
+      setLoggedIn(true);
       console.log('Logging in');
-      //creating our RTCPeerConnection object
-      var configuration: RTCConfiguration = {
-        iceServers: [RTCconf],
-      };
-
-      const con = new RTCPeerConnection(configuration);
-      streamData?.getTracks().forEach((track) => {
-        con.addTrack(track, streamData);
-      });
-
-      //setup ice handling
-      //when the browser finds an ice candidate we send it to another peer
-      con.onicecandidate = (event) => {
+      myConnection.onicecandidate = (event) => {
         if (event.candidate) {
           send({
             type: 'candidate',
@@ -85,7 +88,6 @@ function App() {
           });
         }
       };
-      setMyConnection(con);
     }
   };
 
@@ -94,11 +96,6 @@ function App() {
     console.log('Received answer', answer);
     myConnection.setRemoteDescription(new RTCSessionDescription(answer));
   };
-
-  myConnection?.addEventListener('track', (event) => {
-    console.log('Event track triggered', event.streams);
-    remoteVideo.current.srcObject = event.streams[0];
-  });
 
   //when we got ice candidate from another user
   const onCandidate = (candidate: RTCIceCandidate) => {
@@ -140,15 +137,21 @@ function App() {
     socket.send(JSON.stringify(message));
   };
 
-  const callSubmit = (event: React.FormEvent<HTMLFormElement>) => {
-    if (!callname) return;
-    console.log('Calling : ', callname);
-    event.preventDefault();
-    myConnection.createOffer().then((offer) => {
-      socket.send(JSON.stringify({ type: 'offer', offer: offer, name: callname }));
-      myConnection.setLocalDescription(offer);
-    });
-  };
+  const callSubmit = useCallback(
+    (event: React.FormEvent<HTMLFormElement>) => {
+      if (!callname) {
+        console.log('no callername');
+        return;
+      }
+      console.log('Calling : ', callname);
+      myConnection.createOffer().then((offer) => {
+        socket.send(JSON.stringify({ type: 'offer', offer: offer, name: callname }));
+        myConnection.setLocalDescription(offer);
+      });
+      event.preventDefault();
+    },
+    [callname, myConnection, socket]
+  );
 
   return (
     <div className='App row'>
@@ -174,22 +177,19 @@ function App() {
         />
         <button type='submit'>Connect</button>
       </form>
-      {myConnection ? (
-        <form onSubmit={callSubmit}>
-          <label htmlFor='inputCall'>Call :</label>
-
-          <input
-            id='inputCall'
-            type='text'
-            onChange={(e) => setCallname(e.target.value)}
-            minLength={4}
-            title='Only letters allowed'
-            pattern='[A-Za-z]+'
-            required
-          />
-          <button type='submit'>Call</button>
-        </form>
-      ) : null}
+      <form onSubmit={callSubmit}>
+        <label htmlFor='inputCall'>Call :</label>
+        <input
+          id='inputCall'
+          type='text'
+          onChange={(e) => setCallname(e.target.value)}
+          minLength={4}
+          title='Only letters allowed'
+          pattern='[A-Za-z]+'
+          required
+        />
+        <button type='submit'>Call</button>
+      </form>
     </div>
   );
 }
