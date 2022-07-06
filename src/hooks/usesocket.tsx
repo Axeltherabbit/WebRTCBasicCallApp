@@ -153,7 +153,7 @@ const reducer = (state: SocketState, action: SocketAction) => {
   }
 };
 
-export const useSocket = (setLogged: Dispatch<SetStateAction<boolean>>) => {
+export const useSocket = (setLogged: Dispatch<SetStateAction<boolean>>): [SocketState, Dispatch<SocketAction>] => {
   const initialState: SocketState = {
     socket: new WebSocket(SignalServer),
     myConnection: new RTCPeerConnection(configuration),
@@ -162,7 +162,5 @@ export const useSocket = (setLogged: Dispatch<SetStateAction<boolean>>) => {
     setLogged: setLogged,
   };
 
-  const [state, dispatch] = useReducer(reducer, initialState);
-
-  return { state, dispatch };
+  return useReducer(reducer, initialState);
 };
