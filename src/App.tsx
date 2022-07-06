@@ -23,7 +23,7 @@ export const App: React.FC = () => {
   const myVideo = useRef<HTMLVideoElement>(null!);
 
   const [logged, setLogged] = useState(false);
-  const { state, dispatch } = useSocket(setLogged);
+  const [state, dispatch] = useSocket(setLogged);
   const [username, setUsername] = useState('');
   const [callname, setCallname] = useState('');
 
@@ -64,24 +64,26 @@ export const App: React.FC = () => {
   };
   return (
     <div className='App row'>
-      {state.myConnection ? <p> Username : {username}</p> : null}
       <div className='column'>
         <video width='320' height='240' ref={myVideo} autoPlay playsInline muted />
         <VideoStream width='320' height='240' srcObject={state.remoteVideo} autoPlay playsInline />
       </div>
-      <form onSubmit={loginSubmit}>
-        <label htmlFor='inputUsername'>Username :</label>
-        <UsernameInput id={'inputUsername'} onChange={(e) => setUsername(e.target.value)} />
-        <button type='submit'>Connect</button>
-      </form>
-
       {logged ? (
-        <form onSubmit={callSubmit}>
-          <label htmlFor='inputCall'>Call :</label>
-          <UsernameInput id={'inputCall'} onChange={(e) => setCallname(e.target.value)} />
-          <button type='submit'>Call</button>
+        <>
+          <p> Username : {username}</p>
+          <form onSubmit={callSubmit}>
+            <label htmlFor='inputCall'>Call :</label>
+            <UsernameInput id='inputCall' onChange={(e) => setCallname(e.target.value)} />
+            <button type='submit'>Call</button>
+          </form>
+        </>
+      ) : (
+        <form onSubmit={loginSubmit}>
+          <label htmlFor='inputUsername'>Username :</label>
+          <UsernameInput id='inputUsername' onChange={(e) => setUsername(e.target.value)} />
+          <button type='submit'>Connect</button>
         </form>
-      ) : null}
+      )}
     </div>
   );
 };
