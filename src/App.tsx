@@ -1,8 +1,7 @@
-import { fail } from 'assert';
 import { ChangeEvent, useEffect, useRef, useState } from 'react';
 import 'style/App.scss';
 import { VideoStream } from './components/Video/VideoStream';
-import { ACTION, useSocket } from './hooks/useSocket';
+import { ACTION, useSocket } from './hooks/usesocket';
 
 type Props = { onChange: (e: ChangeEvent<HTMLInputElement>) => void; id: string };
 const UsernameInput: React.FC<Props> = ({ onChange, id }) => {
@@ -40,7 +39,7 @@ export const App: React.FC = () => {
 
     state.myConnection.addEventListener(
       'track',
-      (event) => {
+      (event: RTCTrackEvent) => {
         console.log('Event track triggered', event.streams);
         dispatch({ type: ACTION.SET_REMOTE_VIDEO, remoteVideo: event.streams[0] });
       },

@@ -1,7 +1,7 @@
 import { useCallback, VideoHTMLAttributes } from 'react';
 
 type VideoProps = VideoHTMLAttributes<HTMLVideoElement> & {
-  srcObject?: MediaStream | null;
+  srcObject: MediaStream | null;
 };
 
 export const VideoStream: React.FC<VideoProps> = ({ srcObject, ...props }) => {
